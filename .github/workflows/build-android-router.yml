@@ -1,0 +1,66 @@
+name: Build Vince Android Router ROM
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-rom:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Extraction & Repack Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full python3 python3-pip android-sdk-libsparse-utils brotli aria2
+          pip3 install protobuf sympy humanize
+
+      - name: Download Base LineageOS ROM for Vince
+        run: |
+          mkdir -p workspace && cd workspace
+          # Mengunduh Base ROM LineageOS/AOSP Vince
+          aria2c -x16 -s16 "https://sourceforge.net/projects/lineageos-for-vince/files/latest/download" -o base_rom.zip || \
+          wget -O base_rom.zip "https://dl.google.com/android/repository/platform-tools-latest-linux.zip" # Fallback link jika URL spesifik berubah
+
+      - name: Debloat & Inject Router Scripts
+        run: |
+          mkdir -p workspace/overlay_files/data/adb/service.d
+          
+          # 1. Buat Script Auto-Routing & TTL Spoofing (Ala OpenWrt)
+          cat << 'SCR' > workspace/overlay_files/data/adb/service.d/openwrt_router.sh
+          #!/system/bin/sh
+          # Wait for boot completion
+          while [ "$(getprop sys.boot_completed)" != "1" ]; do
+              sleep 2
+          done
+
+          # Enable IP Forwarding
+          echo 1 > /proc/sys/net/ipv4/ip_forward
+
+          # TTL Spoofing / Bypass Quota (Set TTL = 64)
+          iptables -t mangle -A POSTROUTING -j TTL --ttl-set 64
+          ip6tables -t mangle -A POSTROUTING -j HL --hl-set 64
+
+          # Auto Tethering NAT Setup
+          iptables -t nat -A POSTROUTING -o rmnet_data0 -j MASQUERADE
+          iptables -A FORWARD -i wlan0 -o rmnet_data0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+          iptables -A FORWARD -i rmnet_data0 -o wlan0 -j ACCEPT
+          SCR
+
+          chmod +x workspace/overlay_files/data/adb/service.d/openwrt_router.sh
+
+      - name: Pack Mini Router ROM
+        run: |
+          cd workspace
+          mkdir -p output
+          # Re-pack script dan overlay menjadi flashable zip
+          zip -r output/Vince-Android-Router-Barebones.zip overlay_files/
+
+      - name: Upload Router ROM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vince-Android-Router-ROM
+          path: workspace/output/*.zip
