@@ -1,0 +1,49 @@
+name: Build Vince OpenWrt ImageBuilder
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download & Extract Official ImmortalWrt Image Builder
+        run: |
+          wget -q https://downloads.immortalwrt.org/releases/23.05.3/targets/msm89xx/generic/immortalwrt-imagebuilder-23.05.3-msm89xx-generic.Linux-x86_64.tar.xz
+          tar -xf immortalwrt-imagebuilder-*.tar.xz
+          rm -f immortalwrt-imagebuilder-*.tar.xz
+          mv immortalwrt-imagebuilder-* imagebuilder
+
+      - name: Inject Custom Packages & Files into Image Builder
+        run: |
+          cd imagebuilder
+          mkdir -p packages
+          git clone --depth 1 https://github.com/4IceG/luci-app-sms-tool-js.git packages/luci-app-sms-tool-js || true
+          git clone --depth 1 https://github.com/4IceG/luci-app-modemband.git packages/luci-app-modemband || true
+          cp -r ../files .
+
+      - name: Build Firmware Image
+        run: |
+          cd imagebuilder
+          make image PROFILE="xiaomi_vince" PACKAGES="
+            luci luci-compat dropbear hostapd kmod-wcn36xx kmod-tcp-bbr
+            sqm-scripts luci-app-sqm luci-app-travelmate relayd luci-proto-relay
+            modemmanager luci-proto-modemmanager qmi-utils mbim-utils sms-tool
+            usb-modeswitch kmod-usb-net-qmi-wwan kmod-usb-net-cdc-ether kmod-usb-net-rndis
+            kmod-usb-serial-option kmod-usb-serial-qualcomm kmod-usb-storage kmod-usb2 kmod-usb3
+            block-mount kmod-fs-ext4 kmod-fs-f2fs kmod-fs-exfat mwan3 luci-app-mwan3
+            wireguard-tools kmod-wireguard luci-proto-wireguard zerotier luci-app-zerotier
+            zram-swap aria2 luci-app-aria2 luci-app-statistics luci-app-ttyd libffi glib2
+          " FILES="files"
+
+      - name: Collect & Upload Firmware Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-vince-firmware
+          path: imagebuilder/bin/targets/msm89xx/generic/*
+
