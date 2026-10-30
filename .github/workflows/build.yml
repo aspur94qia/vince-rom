@@ -14,17 +14,20 @@ jobs:
 
       - name: Download & Extract Official ImmortalWrt Image Builder
         run: |
-          URL=$(curl -s https://downloads.immortalwrt.org/releases/23.05.3/targets/msm89xx/generic/ | grep -o 'immortalwrt-imagebuilder-[^"]*\.tar\.xz' | head -n 1)
-          if [ -z "$URL" ]; then
-            URL="immortalwrt-imagebuilder-23.05.3-msm89xx-generic.Linux-x86_64.tar.xz"
-          fi
-          echo "Downloading: $URL"
-          wget -q -c "https://downloads.immortalwrt.org/releases/23.05.3/targets/msm89xx/generic/$URL" || \
-          wget -q -c "https://downloads.immortalwrt.org/snapshots/targets/msm89xx/generic/immortalwrt-imagebuilder-msm89xx-generic.Linux-x86_64.tar.xz"
+          BASE_URL="https://downloads.immortalwrt.org/snapshots/targets/msm89xx/generic"
+          IB_FILE=$(curl -sL "$BASE_URL/" | grep -oE 'immortalwrt-imagebuilder-[^"]*-msm89xx-generic.Linux-x86_64\.tar\.(xz|bz2|gz)' | head -n 1)
           
-          tar -xf immortalwrt-imagebuilder-*.tar.xz
-          rm -f immortalwrt-imagebuilder-*.tar.xz
-          mv immortalwrt-imagebuilder-* imagebuilder
+          if [ -z "$IB_FILE" ]; then
+            BASE_URL="https://downloads.immortalwrt.org/releases/23.05.2/targets/msm89xx/generic"
+            IB_FILE=$(curl -sL "$BASE_URL/" | grep -oE 'immortalwrt-imagebuilder-[^"]*-msm89xx-generic.Linux-x86_64\.tar\.(xz|bz2|gz)' | head -n 1)
+          fi
+
+          echo "Downloading ImageBuilder from: $BASE_URL/$IB_FILE"
+          wget -q --show-progress -c "$BASE_URL/$IB_FILE" -O imagebuilder.tar.xz
+
+          mkdir -p imagebuilder
+          tar -xf imagebuilder.tar.xz -C imagebuilder --strip-components=1
+          rm -f imagebuilder.tar.xz
 
       - name: Inject Custom Packages & Files into Image Builder
         run: |
